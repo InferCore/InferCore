@@ -226,6 +226,14 @@ func (c *Config) validate() error {
 			if strings.TrimSpace(b.Endpoint) == "" {
 				return fmt.Errorf("config validation: backend %q type %q requires endpoint", b.Name, b.Type)
 			}
+		case "gemini":
+			// endpoint optional; empty uses https://generativelanguage.googleapis.com in adapter
+			if strings.TrimSpace(b.APIKey) == "" {
+				return fmt.Errorf("config validation: backend %q type gemini requires api_key", b.Name)
+			}
+			if strings.TrimSpace(b.DefaultModel) == "" {
+				return fmt.Errorf("config validation: backend %q type gemini requires default_model", b.Name)
+			}
 		default:
 			return fmt.Errorf("config validation: unsupported backend type %q for backend %q", b.Type, b.Name)
 		}

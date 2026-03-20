@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/infercore/infercore/internal/adapters/gemini"
 	"github.com/infercore/infercore/internal/adapters/mock"
 	"github.com/infercore/infercore/internal/adapters/vllm"
 	"github.com/infercore/infercore/internal/config"
@@ -146,6 +147,8 @@ func buildAdapter(backend config.BackendConfig) (interfaces.BackendAdapter, bool
 		return mock.New(backend), true
 	case "vllm", "openai", "openai_compatible":
 		return vllm.New(backend), true
+	case "gemini":
+		return gemini.New(backend), true
 	default:
 		return nil, false
 	}

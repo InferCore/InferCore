@@ -324,6 +324,81 @@ reliability:
 	}
 }
 
+func TestLoad_GeminiBackendMinimal(t *testing.T) {
+	cfgPath := writeTempConfig(t, `
+backends:
+  - name: gem
+    type: gemini
+    timeout_ms: 100
+    api_key: AIza-test
+    default_model: gemini-2.0-flash
+    cost: { unit: 1, currency: credit }
+    capabilities: [chat]
+tenants:
+  - id: t1
+routing:
+  default_backend: gem
+reliability:
+  fallback_enabled: false
+`)
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("expected config to load: %v", err)
+	}
+	b := cfg.Backends[0]
+	if b.Endpoint != "" {
+		t.Fatalf("expected empty endpoint for default base URL, got %q", b.Endpoint)
+	}
+	if b.DefaultModel != "gemini-2.0-flash" {
+		t.Fatalf("default_model: %q", b.DefaultModel)
+	}
+}
+
+func TestLoad_GeminiBackendMissingAPIKey(t *testing.T) {
+	cfgPath := writeTempConfig(t, `
+backends:
+  - name: gem
+    type: gemini
+    timeout_ms: 100
+    default_model: gemini-2.0-flash
+    cost: { unit: 1, currency: credit }
+tenants:
+  - id: t1
+routing:
+  default_backend: gem
+reliability:
+  fallback_enabled: false
+`)
+
+	_, err := Load(cfgPath)
+	if err == nil || !strings.Contains(err.Error(), "requires api_key") {
+		t.Fatalf("expected gemini api_key validation error, got: %v", err)
+	}
+}
+
+func TestLoad_GeminiBackendMissingDefaultModel(t *testing.T) {
+	cfgPath := writeTempConfig(t, `
+backends:
+  - name: gem
+    type: gemini
+    timeout_ms: 100
+    api_key: k
+    cost: { unit: 1, currency: credit }
+tenants:
+  - id: t1
+routing:
+  default_backend: gem
+reliability:
+  fallback_enabled: false
+`)
+
+	_, err := Load(cfgPath)
+	if err == nil || !strings.Contains(err.Error(), "requires default_model") {
+		t.Fatalf("expected gemini default_model validation error, got: %v", err)
+	}
+}
+
 func TestLoad_OpenAICompatibleBackend(t *testing.T) {
 	cfgPath := writeTempConfig(t, `
 backends:

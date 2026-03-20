@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"github.com/infercore/infercore/internal/adapters/gemini"
 	"github.com/infercore/infercore/internal/adapters/mock"
 	"github.com/infercore/infercore/internal/adapters/vllm"
 	"github.com/infercore/infercore/internal/config"
@@ -49,6 +51,45 @@ func TestAdapterConformance_VLLM(t *testing.T) {
 		Type:         "vllm",
 		Endpoint:     srv.URL,
 		TimeoutMS:    200,
+		Capabilities: []string{"chat"},
+		Cost:         config.CostConfig{Unit: 2},
+	})
+	assertAdapterConformance(t, adapter)
+}
+
+func TestAdapterConformance_Gemini(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("x-goog-api-key") == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v1beta/models":
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, ":generateContent"):
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"candidates": []map[string]any{
+					{
+						"content": map[string]any{
+							"parts": []map[string]any{{"text": "hello from gemini"}},
+						},
+					},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	adapter := gemini.New(config.BackendConfig{
+		Name:         "gem-b",
+		Type:         "gemini",
+		Endpoint:     srv.URL,
+		TimeoutMS:    200,
+		APIKey:       "test-key",
+		DefaultModel: "gemini-2.0-flash",
 		Capabilities: []string{"chat"},
 		Cost:         config.CostConfig{Unit: 2},
 	})

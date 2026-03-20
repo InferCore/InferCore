@@ -79,6 +79,30 @@ backends:
   #   timeout_ms: 60000
   #   cost: { unit: 2, currency: credit }
   #   capabilities: [chat, reasoning, summarization]
+  #
+  # Qwen via Alibaba DashScope OpenAI-compatible mode (no separate adapter — same as openai_compatible):
+  # - name: qwen-compatible
+  #   type: openai_compatible
+  #   endpoint: https://dashscope.aliyuncs.com/compatible-mode/v1
+  #   api_key: ${DASHSCOPE_API_KEY}
+  #   health_path: /models
+  #   default_model: qwen-turbo
+  #   timeout_ms: 60000
+  #   cost: { unit: 1, currency: credit }
+  #   capabilities: [chat, reasoning, summarization]
+  #
+  # Google Gemini (native generateContent API — use type gemini, not openai_compatible):
+  # - name: gemini-flash
+  #   type: gemini
+  #   # endpoint defaults to https://generativelanguage.googleapis.com if omitted
+  #   endpoint: https://generativelanguage.googleapis.com
+  #   api_key: ${GEMINI_API_KEY}
+  #   default_model: gemini-2.0-flash
+  #   timeout_ms: 60000
+  #   cost: { unit: 2, currency: credit }
+  #   capabilities: [chat, reasoning, summarization]
+  #
+  # Alternative: put an OpenAI-compatible proxy in front of Gemini and use openai_compatible.
 
 tenants:
   - id: team-a

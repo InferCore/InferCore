@@ -203,41 +203,63 @@ API draft: `api/openapi.yaml`
 
 ## Current runtime behavior
 
-- YAML config loading at startup (`INFERCORE_CONFIG` or default example file)
-- `server.request_timeout_ms`: wall-clock budget for each `/infer` after JSON validation (policy + routing + backend execution); when **this** budget is exceeded returns **504** with `error.code=gateway_timeout` (per-backend `timeout_ms` expiring first remains **502** `execution_failed`). `cmd/infercore` sets `http.Server` `ReadTimeout` / `WriteTimeout` / `IdleTimeout` from `server.http.{read,write,idle}_timeout_ms` when set, otherwise from `request_timeout_ms` plus conventional slack (body read / write / keep-alive)
-- Basic tenant policy enforcement:
-  - unknown tenant rejection
-  - per-request budget gate (lightweight estimate)
-  - per-tenant RPS rate limit (in-memory, per-second window)
-  - priority normalization from tenant defaults
-- Rule-based routing by tenant class/task type/priority
-- Routing skips backends that fail `adapter.Health` (cached per `server.health_cache_ttl_ms`; same cache backs `/status` backend status); if the default backend is unhealthy, the first healthy backend in config order is used (`healthy-fallback-order`); if none are healthy, `/infer` returns `route_error`
-- Overload: `reliability.overload.queue_limit` + `action` (`reject` → 503 `overload`, `degrade` → skip cost optimization and annotate `degrade` in the JSON response); in-flight gauge `infercore_infer_inflight` on `/metrics`; `/status.queue_depth` reflects the same counter
-- Lightweight cost optimization that can switch to a cheaper compatible backend within budget (only among healthy backends)
-- Timeout-aware execution with fallback chain from reliability config
-- Structured event logs for policy rejection, execution failure, and fallback trigger
-- `/infer` response includes `policy_reason` and `effective_priority` for easier debugging
-- `/infer` success response includes `trace_id` for trace correlation
-- Error responses are structured as `{request_id,status,error:{code,message}}`
-- HTTP metrics include path/method/status labels (`infercore_http_requests_total`)
-- `priority` can be omitted in `/infer`; policy engine normalizes it from tenant defaults
-- Config loader validates backend/tenant uniqueness and route/fallback backend references
-- Config loader also validates routing rule name uniqueness and non-empty fallback triggers
-- Allowed fallback triggers are validated: `timeout`, `backend_unhealthy`, `backend_error`
-- Backend adapters: `mock`; OpenAI-compatible HTTP via `vllm`, `openai`, or `openai_compatible` (same implementation — Chat Completions + optional `GET` health)
-- OpenAI-compatible backends support `api_key` (default `Authorization: Bearer …`), optional `auth_header_name` for raw key headers, `headers` map, `health_path` (default `/health`; use `/v1/models` for many cloud APIs), and `default_model`
-- OpenAI-compatible adapter: `options.stream=true` uses upstream SSE when supported; JSON responses are treated as `stream_degraded`; InferCore still returns aggregated JSON to the client (see `docs/streaming-and-fallback.md`)
-- `/infer` response includes `degrade` when upstream degrades streaming
-- In-memory SLO engine (bounded by `slo.max_records` / `slo.max_age_ms`) records TTFT (from adapter), TPOT (streaming adapters when available), completion latency, and fallback markers
-- Telemetry exporter emits metric/event logs for completed inference requests
-- Basic trace hooks emit per-request trace records with trace/span IDs and result labels
-- Telemetry: `log`, `otlp-http-stub`, `otlp-http` (OpenTelemetry OTLP/HTTP protobuf for standard Collectors), `otlp-http-json` (legacy non-standard JSON)
-- Runtime telemetry switches: `telemetry.metrics_enabled` and `telemetry.tracing_enabled`
-- OTLP flush/timeout via `otlp_flush_interval_ms`, `otlp_timeout_ms` (SDK batching for `otlp-http`)
-- `/status` includes telemetry exporter status summary and `scaling_signals` (queue depth, timeout spike hint, rolling TTFT/fallback aggregates from the in-memory SLO store, `max_concurrency` hints from config)
-- `/metrics` uses Prometheus `client_golang` (names unchanged: `infercore_requests_total`, `infercore_infer_inflight`, `infercore_http_requests_total`, plus `infercore_scaling_*` gauges mirroring scaling signals)
-- Optional gate: `server.infercore_api_key` or `INFERCORE_API_KEY` — send `X-InferCore-Api-Key` or `Authorization: Bearer …` on `/infer`, `/status`, `/metrics` (`/health` stays open)
-- Process waits for SIGINT/SIGTERM and shuts down HTTP server + OTLP flush (`Server.Shutdown`)
+High-level summary of what the running service does today. For streaming details see [`docs/streaming-and-fallback.md`](docs/streaming-and-fallback.md); for metrics/logs see [`docs/observability.md`](docs/observability.md).
+
+### Config & validation
+
+- YAML loaded at startup (`INFERCORE_CONFIG`, or the default example path).
+- Validates unique backend/tenant names, routing rule names, route/fallback backend references, and non-empty fallback triggers.
+- Allowed fallback triggers: `timeout`, `backend_unhealthy`, `backend_error`.
+
+### Request timeouts & HTTP server
+
+- **`server.request_timeout_ms`** — wall-clock budget for each `/infer` after JSON body validation (policy + routing + backend). If this fires: **504** and `error.code=gateway_timeout`. If a per-backend **`timeout_ms`** fires first: **502** `execution_failed`.
+- **`cmd/infercore`** sets `http.Server` `ReadTimeout` / `WriteTimeout` / `IdleTimeout` from `server.http.{read,write,idle}_timeout_ms` when set; otherwise derives from `request_timeout_ms` plus conventional slack (read / write / keep-alive).
+
+### Tenant policy & routing
+
+- **Policy:** reject unknown tenants, per-request budget gate (light estimate), per-tenant RPS limit (in-memory, 1s window), priority normalized from tenant defaults. **`priority`** may be omitted on `/infer`; it is filled from tenant config.
+- **Routing:** rules by tenant class / task type / priority.
+- **Health-aware routing:** skips backends failing `adapter.Health`, cached with `server.health_cache_ttl_ms` (same cache drives `/status` backend fields). If the default backend is unhealthy, uses the first healthy backend in config order (`healthy-fallback-order`). If none healthy: `route_error` on `/infer`.
+
+### Overload, cost, reliability
+
+- **Overload:** `reliability.overload.queue_limit` and `action` — `reject` → **503** `overload`; `degrade` → skip cost optimization and set `degrade` in the JSON. In-flight: `infercore_infer_inflight` on `/metrics`; `/status.queue_depth` matches the same counter.
+- **Cost:** may pick a cheaper compatible backend within budget (healthy backends only).
+- **Fallback:** timeout-aware chain from reliability config; structured event logs on policy rejection, execution failure, and fallback.
+
+### `/infer` responses & errors
+
+- Success includes **`trace_id`**; also **`policy_reason`** and **`effective_priority`** for debugging.
+- Errors: `{ request_id, status, error: { code, message } }`.
+- **`degrade`** appears when upstream streaming is degraded (see streaming doc).
+
+### Backend adapters
+
+| Kind | Config `type` | Notes |
+|------|----------------|--------|
+| Mock | `mock` | For tests / load profiles. |
+| OpenAI-compatible | `vllm`, `openai`, `openai_compatible` | Same code path: **Chat Completions** + optional `GET` health. Supports `api_key` (default `Authorization: Bearer …`), optional `auth_header_name`, `headers`, **`health_path`** (default `/health`; many clouds use `/v1/models`), **`default_model`**. |
+| Gemini (native) | `gemini` | `generateContent` / `streamGenerateContent`, API key. Example: [`configs/infercore.example.yaml`](configs/infercore.example.yaml). |
+| Qwen (DashScope) | `openai_compatible` | OpenAI-compatible base, e.g. `https://dashscope.aliyuncs.com/compatible-mode/v1` with `health_path: /models`, `default_model`, `api_key` — **no** separate adapter. |
+
+### Streaming (OpenAI-compatible)
+
+- With **`options.stream=true`**, uses upstream SSE when supported; a JSON body instead is treated as **`stream_degraded`**. InferCore still returns **aggregated JSON** to the client.
+
+### SLO, telemetry & metrics
+
+- **SLO store** (in-memory, bounded by `slo.max_records` / `slo.max_age_ms`): TTFT, TPOT (when adapter provides it), completion latency, fallback markers.
+- **Telemetry exporters:** `log`, `otlp-http-stub`, `otlp-http` (OTLP/HTTP protobuf), `otlp-http-json` (legacy JSON). Switches: `telemetry.metrics_enabled`, `telemetry.tracing_enabled`. OTLP: `otlp_flush_interval_ms`, `otlp_timeout_ms` (batching for `otlp-http`).
+- Exporter emits metric/event logs per completed inference; trace hooks add trace/span IDs and result labels.
+- **`GET /status`:** exporter summary and **`scaling_signals`** (queue depth, timeout hint, rolling TTFT/fallback from SLO, `max_concurrency` hints).
+- **`GET /metrics`:** Prometheus `client_golang` — e.g. `infercore_requests_total`, `infercore_infer_inflight`, `infercore_http_requests_total`, plus `infercore_scaling_*` gauges aligned with scaling signals.
+- HTTP requests: `infercore_http_requests_total` with path/method/status labels.
+
+### Optional API key & shutdown
+
+- Gate with **`server.infercore_api_key`** or **`INFERCORE_API_KEY`**: send `X-InferCore-Api-Key` or `Authorization: Bearer …` on `/infer`, `/status`, `/metrics`. **`/health`** stays unauthenticated.
+- On **SIGINT/SIGTERM**: graceful HTTP shutdown and OTLP flush (`Server.Shutdown`).
 
 ## Multi-instance deployment
 

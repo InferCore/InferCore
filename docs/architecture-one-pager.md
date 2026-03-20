@@ -1,6 +1,6 @@
 # InferCore Architecture One-Pager
 
-> **Note:** This document is a **full Markdown copy** of the architectural overview in the repository root [`README.md`](../README.md) (sections through *Differentiators* / *Related products*). Prefer editing **README** first, then mirroring changes here so PDF/print exports stay aligned.
+> **Note:** This document is a **full Markdown copy** of the architectural overview in the repository root [`README.md`](../README.md) (through *Differentiators*). Prefer editing **README** first, then mirroring changes here so PDF/print exports stay aligned.
 
 ## Project definition
 
@@ -88,13 +88,9 @@ Parallel outputs:
 
 The service exposes `scaling_signals` on `GET /status` and matching `infercore_scaling_*` Prometheus gauges (queue depth, timeout spike hint, rolling TTFT/fallback aggregates, optional `max_concurrency` hints). These are intended for HPA/KEDA or custom autoscalers; they reflect **per-replica** in-memory state unless extended with shared stores. See [observability.md](./observability.md) for metric and status field details.
 
-## Related products
-
-- **InferCore** — runs the **decision layer** (how requests are routed, protected, and metered).
-- **MicroWatch** (if you use it in your stack) — oriented toward **deep observability and analysis** (what happened, why, cost/SLO health). One-line split: *InferCore runs the plane; MicroWatch explains the run.*
-
 ## Further reading
 
 - [README.md](../README.md) — full project quickstart, runtime behavior, and document index
 - [scope.md](./scope.md) — in-scope / out-of-scope
 - [observability.md](./observability.md) — metrics, status, timeouts
+- [LICENSE](../LICENSE) — Apache License 2.0

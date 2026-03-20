@@ -80,11 +80,6 @@ Parallel outputs:
 4. **Multi-tenant policy** — Tenant classes, priorities, per-request budget estimates, per-tenant RPS windows (in-memory per replica).
 5. **Scaling signals** — Queue depth, timeout-spike hints, TTFT degradation ratio, recent fallback rate, optional `max_concurrency` hints from config — intended for HPA/KEDA or custom autoscalers (**per-replica** unless you add shared state).
 
-### Related products
-
-- **InferCore** — runs the **decision layer** (how requests are routed, protected, and metered).
-- **MicroWatch** (if you use it in your stack) — oriented toward **deep observability and analysis** (what happened, why, cost/SLO health). One-line split: *InferCore runs the plane; MicroWatch explains the run.*
-
 ## Repository layout
 
 This repository includes:
@@ -266,6 +261,7 @@ Horizontal scale is typically **multiple InferCore replicas behind a load balanc
 
 ## Documents
 
+- License: [`LICENSE`](LICENSE) (Apache-2.0)
 - Architecture (full one-pager copy for print/PDF): `docs/architecture-one-pager.md`
 - Scope: `docs/scope.md`
 - Config example: `configs/infercore.example.yaml`
@@ -273,6 +269,14 @@ Horizontal scale is typically **multiple InferCore replicas behind a load balanc
 - Load testing: `docs/load-testing.md`
 - Streaming & fallback: `docs/streaming-and-fallback.md`
 - Planned hardening: `docs/future-work.md`
+
+## License
+
+InferCore is licensed under the **Apache License, Version 2.0**. See the [`LICENSE`](LICENSE) file for the full text.
+
+SPDX-License-Identifier: Apache-2.0
+
+Third-party dependencies are subject to their own licenses (see module metadata and your `go.sum` / vendor tree as applicable).
 
 ## Next Implementation Steps
 

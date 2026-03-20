@@ -49,9 +49,24 @@ Client / SDK
     ↓
 [ Policy Engine ] ← tenant / budget / priority / guardrails
     ↓
-[ Router Engine ] ← route selection / fallback planning / cost-aware decision
+┌──────────────────────────────────────────────────────────────────────────┐
+│ Reliability · overload admission                                         │
+│   • reliability.overload.queue_limit + action: reject (503) | degrade    │
+│   • Degrade: skip cost optimization, annotate response; router sees      │
+│     overload state (queue depth / degrade) for routing hints             │
+└──────────────────────────────────────────────────────────────────────────┘
     ↓
-[ Execution Adapter Layer ] ← vLLM / OpenAI-compatible HTTP / Mock / …
+[ Router Engine ] ← route rules / health-aware backend choice / cost-aware pick
+    ↓
+┌──────────────────────────────────────────────────────────────────────────┐
+│ Reliability · execution & fallback                                       │
+│   • ExecuteWithFallback: primary backend then fallback_rules chain       │
+│   • Triggers: timeout, backend_unhealthy, backend_error                  │
+│   • Per-backend timeout_ms; bounded by gateway request_timeout_ms        │
+│   • Streaming: stream_fallback_enabled when options.stream               │
+└──────────────────────────────────────────────────────────────────────────┘
+    ↓
+[ Execution Adapter Layer ] ← OpenAI-compatible (e.g. OpenAI, vLLM)  / Gemini / Mock / …
     ↓
 Inference Backends
 

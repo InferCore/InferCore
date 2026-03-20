@@ -1,0 +1,76 @@
+# Profile for throughput / load experiments (mock backends only — no unreachable HTTP health checks).
+# Run: INFERCORE_CONFIG=configs/infercore.loadtest.yaml make run
+#
+# For overload (503) experiments, lower reliability.overload.queue_limit and set action: reject
+# (see docs/load-testing.md).
+
+server:
+  host: 0.0.0.0
+  port: 8080
+  request_timeout_ms: 30000
+  health_cache_ttl_ms: 2000
+  health_check_per_backend_ms: 500
+
+telemetry:
+  exporter: log
+  metrics_enabled: true
+  tracing_enabled: false
+  log_level: error
+
+backends:
+  - name: small-model
+    type: mock
+    endpoint: http://mock-small:9001
+    timeout_ms: 5000
+    max_concurrency: 100
+    cost:
+      unit: 1
+      currency: credit
+    capabilities:
+      - chat
+      - summarization
+
+  - name: large-model
+    type: mock
+    endpoint: http://mock-large:9002
+    timeout_ms: 5000
+    max_concurrency: 50
+    cost:
+      unit: 5
+      currency: credit
+    capabilities:
+      - chat
+      - reasoning
+      - summarization
+
+tenants:
+  - id: team-a
+    class: premium
+    priority: high
+    budget_per_request: 100
+    rate_limit_rps: 0
+
+routing:
+  default_backend: small-model
+  rules:
+    - name: standard-simple-route
+      when:
+        task_type: simple
+      use_backend: small-model
+
+reliability:
+  fallback_enabled: true
+  stream_fallback_enabled: false
+  fallback_rules:
+    - from_backend: large-model
+      on:
+        - timeout
+        - backend_unhealthy
+      fallback_to: small-model
+  overload:
+    queue_limit: 10000
+    action: degrade
+
+slo:
+  max_records: 50000
+  max_age_ms: 600000

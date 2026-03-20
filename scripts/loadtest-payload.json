@@ -1,0 +1,6 @@
+{
+  "tenant_id": "team-a",
+  "task_type": "simple",
+  "input": { "text": "load test" },
+  "options": { "stream": false, "max_tokens": 64 }
+}

@@ -1,0 +1,138 @@
+server:
+  host: 0.0.0.0
+  port: 8080
+  # Wall-clock budget for /infer after JSON validation (policy + routing + backend chain). HTTP Server read/write timeouts are derived from this in cmd/infercore.
+  request_timeout_ms: 3000
+  # Optional net/http.Server timeouts (ms). Omit or set 0 to use defaults derived from request_timeout_ms.
+  # http:
+  #   read_timeout_ms: 180000   # full request body read
+  #   write_timeout_ms: 33000    # handler + response write
+  #   idle_timeout_ms: 120000    # keep-alive
+  # Cache adapter.Health results for routing (skip unhealthy backends).
+  health_cache_ttl_ms: 2000
+  health_check_per_backend_ms: 1500
+  # Optional API key for /infer, /status, /metrics (not /health). Env INFERCORE_API_KEY overrides when set.
+  # infercore_api_key: ""
+
+telemetry:
+  # log | otlp-http-stub | otlp-http (OTel SDK protobuf → standard Collector) | otlp-http-json (legacy JSON)
+  exporter: log
+  metrics_enabled: true
+  tracing_enabled: true
+  otlp_timeout_ms: 1000
+  otlp_retries: 1
+  otlp_batch_size: 10
+  otlp_flush_interval_ms: 1000
+  otlp_endpoint: ""
+  log_level: info
+
+backends:
+  - name: small-model
+    type: mock
+    endpoint: http://mock-small:9001
+    timeout_ms: 800
+    max_concurrency: 100
+    cost:
+      unit: 1
+      currency: credit
+    capabilities:
+      - chat
+      - summarization
+
+  - name: large-model
+    type: mock
+    endpoint: http://mock-large:9002
+    timeout_ms: 1500
+    max_concurrency: 50
+    cost:
+      unit: 5
+      currency: credit
+    capabilities:
+      - chat
+      - reasoning
+      - summarization
+
+  - name: vllm-prod
+    type: vllm
+    endpoint: http://vllm:8000
+    timeout_ms: 1500
+    max_concurrency: 60
+    cost:
+      unit: 4
+      currency: credit
+    capabilities:
+      - chat
+      - reasoning
+
+  # OpenAI-compatible HTTP (same adapter as vllm). Types: openai | openai_compatible | vllm
+  # - api_key: if set, sends Authorization: Bearer <api_key> unless auth_header_name is set
+  # - auth_header_name: e.g. api-key -> header value is raw api_key (no Bearer)
+  # - health_path: default /health (vLLM); use /v1/models for many cloud OpenAI-compatible APIs
+  # - default_model: JSON "model" field for chat completions
+  # - headers: extra static headers (applied before auth; api_key overwrites same header name)
+  # - name: cloud-openai
+  #   type: openai_compatible
+  #   endpoint: https://api.openai.com
+  #   api_key: ${OPENAI_API_KEY}
+  #   health_path: /v1/models
+  #   default_model: gpt-4o-mini
+  #   timeout_ms: 60000
+  #   cost: { unit: 2, currency: credit }
+  #   capabilities: [chat, reasoning, summarization]
+
+tenants:
+  - id: team-a
+    class: premium
+    priority: high
+    budget_per_request: 10
+    rate_limit_rps: 100
+
+  - id: team-b
+    class: standard
+    priority: normal
+    budget_per_request: 3
+    rate_limit_rps: 30
+
+routing:
+  default_backend: small-model
+  rules:
+    - name: premium-complex-route
+      when:
+        tenant_class: premium
+        task_type: complex
+      use_backend: large-model
+
+    - name: standard-simple-route
+      when:
+        task_type: simple
+      use_backend: small-model
+
+reliability:
+  fallback_enabled: true
+  # When false, fallback backends are invoked with stream=false even if the client requested streaming.
+  stream_fallback_enabled: false
+  fallback_rules:
+    - from_backend: large-model
+      on:
+        - timeout
+        - backend_unhealthy
+        - upstream_5xx
+      fallback_to: small-model
+
+  overload:
+    queue_limit: 200
+    # reject: return 503 when infer in-flight count >= queue_limit
+    # degrade: still serve but skip cost-based routing optimization and set degrade.load_shedding in response
+    action: degrade
+
+# In-memory SLO store bounds (per request_id). See docs/observability.md for exported metrics.
+slo:
+  max_records: 10000
+  max_age_ms: 600000
+
+# Not loaded by InferCore yet (documentation / future use only).
+guardrails:
+  enabled: true
+  schema_validation: true
+  blocked_keywords:
+    - forbidden_action

@@ -1,0 +1,15 @@
+# Binaries
+bin/
+dist/
+
+# Go artifacts
+*.test
+*.out
+coverage.out
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+docs/scope.md
+docs/future-work.md

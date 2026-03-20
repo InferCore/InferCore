@@ -1,0 +1,226 @@
+openapi: 3.0.3
+info:
+  title: InferCore API
+  version: 0.1.0
+  description: InferCore HTTP API (OpenAPI draft).
+servers:
+  - url: http://localhost:8080
+paths:
+  /infer:
+    post:
+      summary: Run inference through InferCore decision layer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InferenceRequest'
+      responses:
+        '200':
+          description: Successful inference response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InferenceResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Policy rejected request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Backend execution failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '504':
+          description: Inference exceeded server.request_timeout_ms (policy + routing + backends)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /health:
+    get:
+      summary: Get service health
+      responses:
+        '200':
+          description: Service health
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+  /status:
+    get:
+      summary: Get backend and queue status summary
+      responses:
+        '200':
+          description: Runtime status summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  service:
+                    type: string
+                  backends:
+                    type: array
+                    items:
+                      type: object
+                  queue_depth:
+                    type: integer
+  /metrics:
+    get:
+      summary: Get Prometheus metrics
+      responses:
+        '200':
+          description: Prometheus text format metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+components:
+  schemas:
+    RequestOptions:
+      type: object
+      properties:
+        stream:
+          type: boolean
+        max_tokens:
+          type: integer
+          minimum: 1
+      required:
+        - stream
+        - max_tokens
+    InferenceRequest:
+      type: object
+      properties:
+        tenant_id:
+          type: string
+        task_type:
+          type: string
+        priority:
+          type: string
+        input:
+          type: object
+          additionalProperties: true
+        options:
+          $ref: '#/components/schemas/RequestOptions'
+      required:
+        - tenant_id
+        - task_type
+        - input
+        - options
+    InferenceMetrics:
+      type: object
+      properties:
+        ttft_ms:
+          type: integer
+          format: int64
+        tpot_ms:
+          type: integer
+          format: int64
+        completion_latency_ms:
+          type: integer
+          format: int64
+        estimated_cost:
+          type: number
+          format: float
+      required:
+        - ttft_ms
+        - tpot_ms
+        - completion_latency_ms
+        - estimated_cost
+    FallbackState:
+      type: object
+      properties:
+        triggered:
+          type: boolean
+      required:
+        - triggered
+    DegradeState:
+      type: object
+      properties:
+        triggered:
+          type: boolean
+        reason:
+          type: string
+      required:
+        - triggered
+    InferenceResponse:
+      type: object
+      properties:
+        request_id:
+          type: string
+        trace_id:
+          type: string
+        selected_backend:
+          type: string
+        route_reason:
+          type: string
+        policy_reason:
+          type: string
+        effective_priority:
+          type: string
+        status:
+          type: string
+        result:
+          type: object
+          additionalProperties: true
+        metrics:
+          $ref: '#/components/schemas/InferenceMetrics'
+        fallback:
+          $ref: '#/components/schemas/FallbackState'
+        degrade:
+          $ref: '#/components/schemas/DegradeState'
+      required:
+        - request_id
+        - selected_backend
+        - route_reason
+        - status
+        - result
+        - metrics
+        - fallback
+        - degrade
+    ErrorDetail:
+      type: object
+      properties:
+        code:
+          type: string
+          enum:
+            - method_not_allowed
+            - invalid_request
+            - invalid_options
+            - policy_error
+            - policy_rejected
+            - route_error
+            - execution_failed
+        message:
+          type: string
+      required:
+        - code
+        - message
+    ErrorResponse:
+      type: object
+      properties:
+        request_id:
+          type: string
+        status:
+          type: string
+          example: error
+        error:
+          $ref: '#/components/schemas/ErrorDetail'
+      required:
+        - request_id
+        - status
+        - error

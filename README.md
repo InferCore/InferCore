@@ -309,7 +309,7 @@ High-level summary of what the running service does today. For streaming details
 
 ### Tenant policy & routing
 
-- **Policy:** reject unknown tenants, per-request budget gate (light estimate), per-tenant RPS limit (in-memory, 1s window), priority normalized from tenant defaults. **`priority`** may be omitted on `/infer`; it is filled from tenant config.
+- **Policy:** reject unknown tenants, per-request budget gate (light estimate), per-tenant RPS limit (in-memory, 1s window), priority normalized from tenant defaults. **`priority`** may be omitted on `/infer`; it is filled from tenant config. **`rate_limit_rps` is per-replica** — each process counts independently. In a multi-replica deployment the effective global limit is `N × rate_limit_rps`; set `rate_limit_rps = desired_global_rps / replica_count` to approximate a global cap. Set `0` to disable.
 - **Routing:** rules by tenant class / task type / priority.
 - **Health-aware routing:** skips backends failing `adapter.Health`, cached with `server.health_cache_ttl_ms` (same cache drives `/status` backend fields). If the default backend is unhealthy, uses the first healthy backend in config order (`healthy-fallback-order`). If none healthy: `route_error` on `/infer`.
 

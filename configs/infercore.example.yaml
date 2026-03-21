@@ -109,6 +109,10 @@ tenants:
     class: premium
     priority: high
     budget_per_request: 10
+    # rate_limit_rps is enforced per-replica (in-memory, 1s window).
+    # In a multi-replica deployment the effective global limit is N × rate_limit_rps.
+    # To approximate a global cap: rate_limit_rps = desired_global_rps / replica_count.
+    # Set 0 to disable.
     rate_limit_rps: 100
 
   - id: team-b

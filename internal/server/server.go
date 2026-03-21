@@ -121,6 +121,8 @@ func NewWithDependencies(cfg *config.Config, sloEngine interfaces.SLOEngine, tel
 		ledger = nil
 	}
 
+	warnPerReplicaRateLimit(cfg)
+
 	srv := &Server{
 		cfg:         cfg,
 		policy:      policy.NewBasicEngine(cfg),
@@ -878,3 +880,26 @@ func (r *statusRecorder) WriteHeader(statusCode int) {
 }
 
 var _ interfaces.ScalingSignalProvider = (*Server)(nil)
+
+// warnPerReplicaRateLimit logs a startup advisory when any tenant has a non-zero rate_limit_rps.
+// The in-memory rate limiter counts within a single process; each replica enforces its own window
+// independently. In a multi-replica deployment the effective global limit is N × rate_limit_rps.
+// To approximate a global cap, set rate_limit_rps = desired_global_rps / replica_count.
+func warnPerReplicaRateLimit(cfg *config.Config) {
+	var limited []string
+	for _, t := range cfg.Tenants {
+		if t.RateLimitRPS > 0 {
+			limited = append(limited, t.ID)
+		}
+	}
+	if len(limited) == 0 {
+		return
+	}
+	log.Printf(
+		"event=rate_limit_per_replica tenants=%v "+
+			"note=\"rate_limit_rps is enforced per-replica (in-memory); "+
+			"in a multi-replica deployment the effective global limit is N×rate_limit_rps. "+
+			"To approximate a global cap, divide the desired RPS by your replica count.\"",
+		limited,
+	)
+}

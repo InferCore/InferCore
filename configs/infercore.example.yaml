@@ -2,7 +2,7 @@ server:
   host: 0.0.0.0
   port: 8080
   # Wall-clock budget for /infer after JSON validation (policy + routing + backend chain). HTTP Server read/write timeouts are derived from this in cmd/infercore.
-  request_timeout_ms: 3000
+  request_timeout_ms: 30000
   # Optional net/http.Server timeouts (ms). Omit or set 0 to use defaults derived from request_timeout_ms.
   # http:
   #   read_timeout_ms: 180000   # full request body read
@@ -97,7 +97,7 @@ backends:
   #   # endpoint defaults to https://generativelanguage.googleapis.com if omitted
   #   endpoint: https://generativelanguage.googleapis.com
   #   api_key: ${GEMINI_API_KEY}
-  #   default_model: gemini-2.0-flash
+  #   default_model: gemini-2.5-flash
   #   timeout_ms: 60000
   #   cost: { unit: 2, currency: credit }
   #   capabilities: [chat, reasoning, summarization]

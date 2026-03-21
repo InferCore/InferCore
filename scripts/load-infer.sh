@@ -45,6 +45,9 @@ if [[ ! -f "${PAYLOAD}" ]]; then
 	exit 1
 fi
 
+# hey's -d @file is unreliable on some platforms (empty body → server 400). Read into memory.
+BODY="$(cat "${PAYLOAD}")"
+
 # Fail fast if nothing is listening — otherwise hey reports bogus RPS / NaN and macOS may hit
 # "no buffer space available" from millions of instant connection refused errors.
 if [[ "${SKIP_PREFLIGHT:-}" != "1" ]]; then
@@ -87,7 +90,7 @@ HEY_ARGS=(
 	-c "${CONCURRENCY}"
 	-m POST
 	-T "application/json"
-	-d @"${PAYLOAD}"
+	-d "${BODY}"
 )
 if [[ -n "${QPS}" && "${QPS}" != "0" ]]; then
 	HEY_ARGS+=(-q "${QPS}")

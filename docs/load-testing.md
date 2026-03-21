@@ -11,6 +11,8 @@ This guide covers **performance** (latency, RPS) and **behavior** under pressure
    ```
    `scripts/load-infer.sh` will use `hey` from `PATH`, or from `$(go env GOBIN)/hey` / `$(go env GOPATH)/bin/hey` if those exist. To call `hey` yourself, add Go’s bin directory to `PATH`, e.g. `export PATH="$(go env GOPATH)/bin:$PATH"`.
 
+   The script reads `PAYLOAD` with `cat` and passes it to `hey` as `-d "$BODY"`, because `hey -d @file` can send an **empty body** on some platforms (every `/infer` returns **400**).
+
 ## Quick start (throughput)
 
 Use the mock-only profile to avoid slow/failing health checks against real endpoints:
